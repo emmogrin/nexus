@@ -28,16 +28,16 @@ QUOTE=${slogans[$RANDOM % ${#slogans[@]}]}
 echo -e "${YELLOW}$QUOTE${NC}"
 echo ""
 
-# === NODE ID ===
+# === ASK NODE ID ===
 read -p "📥 Enter your Node ID: " NODE_ID
 
 # === INSTALL CURL FIRST ===
-echo -e "${CYAN}📦 Installing curl first...${NC}"
+echo -e "${CYAN}📦 Installing curl...${NC}"
 sudo apt update && sudo apt install curl -y
 
-# === INSTALL DEPS ===
+# === SYSTEM DEPS ===
 echo -e "${CYAN}🔧 Installing system packages...${NC}"
-sudo apt install build-essential pkg-config libssl-dev git protobuf-compiler -y
+sudo apt install build-essential pkg-config libssl-dev git protobuf-compiler gawk bison make wget tar -y
 
 # === INSTALL RUST ===
 if ! command -v cargo &> /dev/null; then
@@ -50,23 +50,35 @@ else
     echo -e "${GREEN}✔️ Rust already installed.${NC}"
 fi
 
-# === ADD RISC TARGET ===
+# === RISC TARGET ===
 rustup target add riscv32i-unknown-none-elf
 
 # === INSTALL NEXUS CLI ===
 echo -e "${CYAN}⚔️ Installing Nexus CLI...${NC}"
 curl https://cli.nexus.xyz/ | sh
-
-# Apply updated path manually
-if [ -f "$HOME/.bashrc" ]; then
-    source "$HOME/.bashrc"
-fi
+source "$HOME/.bashrc"
 export PATH="$HOME/.cargo/bin:$HOME/.nexus/bin:$PATH"
 
-# === VALIDATE INSTALL ===
-if ! command -v nexus-network &> /dev/null && [ ! -f "$HOME/.nexus/bin/nexus-network" ]; then
-    echo -e "${RED}❌ Nexus CLI installed, but binary not found in path. Try restarting your VPS session.${NC}"
-    exit 1
+# === CHECK FOR GLIBC 2.39 ===
+echo -e "${CYAN}🔍 Checking for GLIBC 2.39...${NC}"
+GLIBC_VER=$(ldd --version | head -n1 | grep -oE '[0-9]+\.[0-9]+')
+if [[ $(echo "$GLIBC_VER < 2.39" | bc -l) == 1 ]]; then
+    echo -e "${YELLOW}⚠️  GLIBC version $GLIBC_VER is too old. Installing 2.39...${NC}"
+    cd ~
+    wget -c https://ftp.gnu.org/gnu/glibc/glibc-2.39.tar.gz
+    tar -xzf glibc-2.39.tar.gz
+    cd glibc-2.39
+    mkdir build && cd build
+    ../configure --prefix=/opt/glibc-2.39
+    make -j$(nproc)
+    sudo make install
+    cd ~
+    export LD_GLIBC="/opt/glibc-2.39/lib/ld-linux-x86-64.so.2"
+    export LIBPATH="/opt/glibc-2.39/lib:/lib/x86_64-linux-gnu:/usr/lib/x86_64-linux-gnu"
+    NEXUS_CMD="$LD_GLIBC --library-path $LIBPATH $HOME/.nexus/bin/nexus-network"
+else
+    echo -e "${GREEN}✔️ GLIBC $GLIBC_VER is OK.${NC}"
+    NEXUS_CMD="nexus-network"
 fi
 
 # === LOG FILE ===
@@ -75,7 +87,7 @@ echo -e "📜 Saving logs to: ${CYAN}$LOG_FILE${NC}"
 echo ""
 
 # === START PROVER ===
-nexus-network start --node-id "$NODE_ID" 2>&1 | awk -v green="$GREEN" -v red="$RED" -v yellow="$YELLOW" -v cyan="$CYAN" -v nc="$NC" -v bold="$BOLD" '
+$NEXUS_CMD start --node-id "$NODE_ID" 2>&1 | awk -v green="$GREEN" -v red="$RED" -v yellow="$YELLOW" -v cyan="$CYAN" -v nc="$NC" -v bold="$BOLD" '
 {
     timestamp = strftime("[%Y-%m-%d %H:%M:%S]")
     if ($0 ~ /Successfully submitted proof/) {
