@@ -18,7 +18,10 @@ This script sets up and runs a Nexus prover node with just one command.
 ## 🚀 1-Line Install
 
 ```bash
-curl -s https://raw.githubusercontent.com/emmogrin/nexus/main/nexus.sh | bash
+git clone https://github.com/emmogrin/nexus.git
+cd nexus
+chmod +x nexus.sh
+./nexus.sh
 ```
 This will:
 
