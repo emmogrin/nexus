@@ -28,16 +28,13 @@ QUOTE=${slogans[$RANDOM % ${#slogans[@]}]}
 echo -e "${YELLOW}$QUOTE${NC}"
 echo ""
 
-# === ASK NODE ID ===
+# === NODE ID ===
 read -p "📥 Enter your Node ID: " NODE_ID
 
-# === INSTALL CURL FIRST ===
-echo -e "${CYAN}📦 Installing curl...${NC}"
-sudo apt update && sudo apt install curl -y
-
-# === SYSTEM DEPS ===
-echo -e "${CYAN}🔧 Installing system packages...${NC}"
-sudo apt install build-essential pkg-config libssl-dev git protobuf-compiler gawk bison make wget tar -y
+# === INSTALL CURL + DEPS ===
+echo -e "${CYAN}📦 Installing dependencies...${NC}"
+sudo apt update
+sudo apt install -y curl build-essential pkg-config libssl-dev git protobuf-compiler gawk bison make wget tar
 
 # === INSTALL RUST ===
 if ! command -v cargo &> /dev/null; then
@@ -59,35 +56,43 @@ curl https://cli.nexus.xyz/ | sh
 source "$HOME/.bashrc"
 export PATH="$HOME/.cargo/bin:$HOME/.nexus/bin:$PATH"
 
-# === CHECK FOR GLIBC 2.39 ===
-echo -e "${CYAN}🔍 Checking for GLIBC 2.39...${NC}"
-GLIBC_VER=$(ldd --version | head -n1 | grep -oE '[0-9]+\.[0-9]+')
+# === CHECK + FIX GLIBC ===
+echo -e "${CYAN}🔍 Checking GLIBC version...${NC}"
+GLIBC_VER=$(ldd --version | head -n1 | grep -oE '[0-9]+\.[0-9]+' | head -n1)
+NEXUS_PATH="$HOME/.nexus/bin/nexus-network"
+
 if [[ $(echo "$GLIBC_VER < 2.39" | bc -l) == 1 ]]; then
-    echo -e "${YELLOW}⚠️  GLIBC version $GLIBC_VER is too old. Installing 2.39...${NC}"
+    echo -e "${YELLOW}⚠️ GLIBC version is $GLIBC_VER — patching to 2.39...${NC}"
     cd ~
-    wget -c https://ftp.gnu.org/gnu/glibc/glibc-2.39.tar.gz
+    wget -nc https://ftp.gnu.org/gnu/glibc/glibc-2.39.tar.gz
     tar -xzf glibc-2.39.tar.gz
     cd glibc-2.39
-    mkdir build && cd build
+    mkdir -p build && cd build
     ../configure --prefix=/opt/glibc-2.39
     make -j$(nproc)
     sudo make install
-    cd ~
-    export LD_GLIBC="/opt/glibc-2.39/lib/ld-linux-x86-64.so.2"
-    export LIBPATH="/opt/glibc-2.39/lib:/lib/x86_64-linux-gnu:/usr/lib/x86_64-linux-gnu"
-    NEXUS_CMD="$LD_GLIBC --library-path $LIBPATH $HOME/.nexus/bin/nexus-network"
+
+    # === Set fallback runner ===
+    export GLIBC_RUNNER="/opt/glibc-2.39/lib/ld-linux-x86-64.so.2"
+    export LIBS="/opt/glibc-2.39/lib:/lib/x86_64-linux-gnu:/usr/lib/x86_64-linux-gnu"
+    RUN_CMD="$GLIBC_RUNNER --library-path $LIBS $NEXUS_PATH"
 else
-    echo -e "${GREEN}✔️ GLIBC $GLIBC_VER is OK.${NC}"
-    NEXUS_CMD="nexus-network"
+    echo -e "${GREEN}✔️ GLIBC $GLIBC_VER is fine.${NC}"
+    RUN_CMD="nexus-network"
 fi
 
-# === LOG FILE ===
+# === FINAL CHECK ===
+if [ ! -x "$NEXUS_PATH" ]; then
+    echo -e "${RED}❌ nexus-network binary not found. Installation failed.${NC}"
+    exit 1
+fi
+
+# === LOGS ===
 LOG_FILE="$HOME/nexus-logs-$(date +%F_%T).log"
-echo -e "📜 Saving logs to: ${CYAN}$LOG_FILE${NC}"
-echo ""
+echo -e "📜 Logging to: ${CYAN}$LOG_FILE${NC}"
 
 # === START PROVER ===
-$NEXUS_CMD start --node-id "$NODE_ID" 2>&1 | awk -v green="$GREEN" -v red="$RED" -v yellow="$YELLOW" -v cyan="$CYAN" -v nc="$NC" -v bold="$BOLD" '
+$RUN_CMD start --node-id "$NODE_ID" 2>&1 | awk -v green="$GREEN" -v red="$RED" -v yellow="$YELLOW" -v cyan="$CYAN" -v nc="$NC" '
 {
     timestamp = strftime("[%Y-%m-%d %H:%M:%S]")
     if ($0 ~ /Successfully submitted proof/) {
