@@ -63,16 +63,23 @@ NEXUS_PATH="$HOME/.nexus/bin/nexus-network"
 
 if [[ $(echo "$GLIBC_VER < 2.39" | bc -l) == 1 ]]; then
     echo -e "${YELLOW}⚠️ GLIBC version is $GLIBC_VER — patching to 2.39...${NC}"
+
+    # 💣 Clean old builds
+    rm -rf glibc-2.39 glibc-2.39.tar.gz
+
+    # ⬇️ Download and extract
     cd ~
-    wget -nc https://ftp.gnu.org/gnu/glibc/glibc-2.39.tar.gz
+    wget https://ftp.gnu.org/gnu/glibc/glibc-2.39.tar.gz
     tar -xzf glibc-2.39.tar.gz
     cd glibc-2.39
     mkdir -p build && cd build
+
+    # ⚙️ Build
     ../configure --prefix=/opt/glibc-2.39
     make -j$(nproc)
     sudo make install
 
-    # === Set fallback runner ===
+    # Set fallback runner
     export GLIBC_RUNNER="/opt/glibc-2.39/lib/ld-linux-x86-64.so.2"
     export LIBS="/opt/glibc-2.39/lib:/lib/x86_64-linux-gnu:/usr/lib/x86_64-linux-gnu"
     RUN_CMD="$GLIBC_RUNNER --library-path $LIBS $NEXUS_PATH"
