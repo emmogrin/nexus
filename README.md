@@ -1,4 +1,4 @@
-⚔️ Nexus Prover — Blessed by Saint Khen
+# ⚔️ Nexus Prover — Blessed by Saint Khen
 
 This script sets up and runs a Nexus prover node with just one command — optimized for QEMU, VPS, and even older Ubuntu systems.
 
