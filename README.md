@@ -33,7 +33,9 @@ Prompt you for your Node ID
 
 Start the prover in a background screen session
 
-# if your ubuntu version is below 24.04.1 and GLIBC version is below 2.39 Use this.
+# ⚠️ For Ubuntu < 24.04.1 or GLIBC < 2.39
+
+Use this if your system is older or running in QEMU (Docker must be installed):
 ```
 git clone https://github.com/emmogrin/nexus.git && cd nexus && chmod +x nexus-docker.sh && ./nexus-docker.sh
 ```
