@@ -63,6 +63,14 @@ lsb_release -a
 ```
 ldd --version      
 ```
+> ⚠️ Docker must be installed
+```
+curl -fsSL https://get.docker.com | sh
+```
+Confirm with:
+```
+docker --version
+```
 If your GLIBC version is lower than 2.39, use the fallback:
 ```
 git clone https://github.com/emmogrin/nexus.git
@@ -70,11 +78,7 @@ cd nexus
 chmod +x nexus-docker.sh
 ./nexus-docker.sh
 ```
-> ⚠️ Docker must be installed
-Confirm with:
-```
-docker --version
-```
+
 
 
 
