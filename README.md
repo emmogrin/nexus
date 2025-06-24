@@ -33,6 +33,18 @@ Prompt you for your Node ID
 
 Start the prover in a background screen session
 
+# if your ubuntu version is below 24.04.1 and GLIBC version is below 2.39 Use this.
+```
+git clone https://github.com/emmogrin/nexus.git && cd nexus && chmod +x nexus-docker.sh && ./nexus-docker.sh
+```
+or
+
+```
+git clone https://github.com/emmogrin/nexus.git
+cd nexus
+chmod +x nexus-docker.sh
+./nexus-docker.sh
+```
 
 # To restart or run after reboot or maybe it closed down.
 ```
