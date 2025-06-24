@@ -31,10 +31,9 @@ echo ""
 # === NODE ID ===
 read -p "📥 Enter your Node ID: " NODE_ID
 
-# === INSTALL CURL + DEPS ===
+# === INSTALL BASE DEPS ===
 echo -e "${CYAN}📦 Installing dependencies...${NC}"
-sudo apt update
-sudo apt install -y curl build-essential pkg-config libssl-dev git protobuf-compiler gawk bison make wget tar
+sudo apt update && sudo apt install -y build-essential pkg-config libssl-dev git protobuf-compiler curl bc gawk bison gcc make wget tar
 
 # === INSTALL RUST ===
 if ! command -v cargo &> /dev/null; then
@@ -47,71 +46,58 @@ else
     echo -e "${GREEN}✔️ Rust already installed.${NC}"
 fi
 
-# === RISC TARGET ===
+# === ADD RISC TARGET ===
 rustup target add riscv32i-unknown-none-elf
+
+# === CHECK GLIBC ===
+echo -e "${CYAN}🔍 Checking GLIBC version...${NC}"
+GLIBC_VER=$(ldd --version | head -n1 | grep -o '[0-9.]*$')
+if [ "$(echo "$GLIBC_VER < 2.39" | bc -l)" -eq 1 ]; then
+  echo -e "${YELLOW}⚠️  GLIBC $GLIBC_VER is too old. Installing 2.39 fallback...${NC}"
+  rm -rf ~/glibc-2.39 ~/glibc-2.39.tar.gz
+  wget -c https://ftp.gnu.org/gnu/glibc/glibc-2.39.tar.gz
+  tar -xzf glibc-2.39.tar.gz && cd glibc-2.39
+  mkdir glibc-build && cd glibc-build
+  ../configure --prefix=/opt/glibc-2.39
+  make -j$(nproc)
+  sudo make install
+  cd ~
+  GLIBC_PATH="/opt/glibc-2.39/lib"
+  GLIBC_RUNNER="/opt/glibc-2.39/lib/ld-linux-x86-64.so.2"
+else
+  echo -e "${GREEN}✔️ GLIBC $GLIBC_VER is sufficient.${NC}"
+  GLIBC_PATH=""
+  GLIBC_RUNNER=""
+fi
 
 # === INSTALL NEXUS CLI ===
 echo -e "${CYAN}⚔️ Installing Nexus CLI...${NC}"
 curl https://cli.nexus.xyz/ | sh
-source "$HOME/.bashrc"
-export PATH="$HOME/.cargo/bin:$HOME/.nexus/bin:$PATH"
 
-# === CHECK + FIX GLIBC ===
-echo -e "${CYAN}🔍 Checking GLIBC version...${NC}"
-GLIBC_VER=$(ldd --version | head -n1 | grep -oE '[0-9]+\.[0-9]+' | head -n1)
-NEXUS_PATH="$HOME/.nexus/bin/nexus-network"
+source ~/.bashrc
+export PATH="$HOME/.nexus/bin:$PATH"
 
-if [[ $(echo "$GLIBC_VER < 2.39" | bc -l) == 1 ]]; then
-    echo -e "${YELLOW}⚠️ GLIBC version is $GLIBC_VER — patching to 2.39...${NC}"
-
-    # 💣 Clean old builds
-    rm -rf glibc-2.39 glibc-2.39.tar.gz
-
-    # ⬇️ Download and extract
-    cd ~
-    wget https://ftp.gnu.org/gnu/glibc/glibc-2.39.tar.gz
-    tar -xzf glibc-2.39.tar.gz
-    cd glibc-2.39
-    mkdir -p build && cd build
-
-    # ⚙️ Build
-    ../configure --prefix=/opt/glibc-2.39
-    make -j$(nproc)
-    sudo make install
-
-    # Set fallback runner
-    export GLIBC_RUNNER="/opt/glibc-2.39/lib/ld-linux-x86-64.so.2"
-    export LIBS="/opt/glibc-2.39/lib:/lib/x86_64-linux-gnu:/usr/lib/x86_64-linux-gnu"
-    RUN_CMD="$GLIBC_RUNNER --library-path $LIBS $NEXUS_PATH"
-else
-    echo -e "${GREEN}✔️ GLIBC $GLIBC_VER is fine.${NC}"
-    RUN_CMD="nexus-network"
+# === VALIDATE NEXUS ===
+NEXUS_BIN=$(command -v nexus-network || echo "$HOME/.nexus/bin/nexus-network")
+if [ ! -x "$NEXUS_BIN" ]; then
+  echo -e "${RED}❌ Nexus CLI not installed or not found in PATH.${NC}"
+  exit 1
 fi
 
-# === FINAL CHECK ===
-if [ ! -x "$NEXUS_PATH" ]; then
-    echo -e "${RED}❌ nexus-network binary not found. Installation failed.${NC}"
-    exit 1
-fi
-
-# === LOGS ===
+# === LOG FILE ===
 LOG_FILE="$HOME/nexus-logs-$(date +%F_%T).log"
 echo -e "📜 Logging to: ${CYAN}$LOG_FILE${NC}"
 
-# === START PROVER ===
-$RUN_CMD start --node-id "$NODE_ID" 2>&1 | awk -v green="$GREEN" -v red="$RED" -v yellow="$YELLOW" -v cyan="$CYAN" -v nc="$NC" '
-{
-    timestamp = strftime("[%Y-%m-%d %H:%M:%S]")
-    if ($0 ~ /Successfully submitted proof/) {
-        print green timestamp " ✅ " $0 nc
-    } else if ($0 ~ /Proof completed successfully/) {
-        print cyan timestamp " 🧠 " $0 nc
-    } else if ($0 ~ /Failed to submit proof/) {
-        print red timestamp " ⚠️  " $0 nc
-    } else if ($0 ~ /Fetched .* tasks/) {
-        print yellow timestamp " 🔄 " $0 nc
-    } else {
-        print timestamp "  " $0
-    }
-    fflush()
-}' | tee -a "$LOG_FILE"
+# === RUN ===
+echo -e "${CYAN}▶️ Starting prover...${NC}"
+if [ -n "$GLIBC_PATH" ]; then
+  CMD="$GLIBC_RUNNER --library-path $GLIBC_PATH:$LD_LIBRARY_PATH $NEXUS_BIN start --node-id $NODE_ID"
+else
+  CMD="$NEXUS_BIN start --node-id $NODE_ID"
+fi
+
+eval $CMD 2>&1 | tee -a "$LOG_FILE"
+
+echo -e "${GREEN}✔️ Nexus prover started!${NC}"
+echo -e "${YELLOW}💤 Let it prove while you sleep...${NC}"
+echo -e "${CYAN}To monitor logs: tail -f $LOG_FILE${NC}"
