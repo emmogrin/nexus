@@ -34,7 +34,17 @@ Prompt you for your Node ID
 Start the prover in a background screen session
 
 
-
+# To restart or run after reboot or maybe it closed down.
+```
+cd nexus
+```
+```
+source ~/.bashrc
+```
+replace your YOUR_NODE_ID with your actual node id
+```
+nexus-network start --node-id YOUR_NODE_ID
+````
 ---
 
 👣 Manual Steps (needed)
